@@ -6,7 +6,7 @@
  *  @Creation: 13-02-2018 06:58:01 UTC-5
  *
  *  @Last By:   Brendan Punsky
- *  @Last Time: 21-03-2018 20:15:36 UTC-5
+ *  @Last Time: 26-05-2018 18:45:26 UTC-5
  *  
  *  @Description:
  *  
@@ -23,23 +23,29 @@ export "shared:cel/cel.odin"
 
 
 
-destroy_value :: proc(value: Value) {
+destroy_value :: proc(value : Value) {
     switch v in value {
     case Array:
-        for elem in v do destroy_value(elem);
+        for elem in v {
+            destroy_value(elem);
+        }
+
         free(v);
 
     case Dict:
-        for key, value in v do destroy_value(value);
+        for key, value in v {
+            destroy_value(value);
+        }
+
         free(v);
     }
 }
 
-escape_string :: proc(str: string) -> string {
-    buf := fmt.String_Buffer{};
+escape_string :: proc(str : string) -> string {
+    buf : fmt.String_Buffer;
 
     for i := 0; i < len(str); {
-        char, skip := utf8.decode_rune(cast([]u8) str[i..]);
+        char, skip := utf8.decode_rune(([]u8)(str[i..]));
         i += skip;
 
         switch char {
@@ -73,7 +79,7 @@ escape_string :: proc(str: string) -> string {
 
 INDENT :: "    ";
 
-_buffer_print :: proc(sb: ^fmt.String_Buffer, value: Value, root := true, indent := 0) {
+_buffer_print :: proc(sb : ^fmt.String_Buffer, value : Value, root := true, indent := 0) {
     switch v in value {
     case Dict:
         if !root do fmt.sbprint(sb, "{");
@@ -111,26 +117,27 @@ _buffer_print :: proc(sb: ^fmt.String_Buffer, value: Value, root := true, indent
         //for in 0..indent do fmt.sbprint(sb, INDENT);
         fmt.sbprint(sb, "]");
 
-    case bool:      fmt.sbprintf(sb, "%v", v);
-    case i64:       fmt.sbprintf(sb, "%v", v);
-    case f64:       fmt.sbprintf(sb, "%v", v);
+    case bool: fmt.sbprintf(sb, "%v", v);
+    case i64:  fmt.sbprintf(sb, "%v", v);
+    case f64:  fmt.sbprintf(sb, "%v", v);
 
     case string:
         str := escape_string(v);
         defer free(str);
+
         fmt.sbprintf(sb, "\"%s\"", str);
     
     case Nil_Value: fmt.sbprintf(sb, "nil");
     }
 }
 
-to_string :: inline proc(value: Value, root := true) -> string {
+to_string :: inline proc(value : Value, root := true) -> string {
     sb := fmt.String_Buffer{};
     _buffer_print(&sb, value, root);
     return fmt.to_string(sb);
 }
 
-print_out :: inline proc(value: Value, root := true) {
+print_out :: inline proc(value : Value, root := true) {
     str := to_string(value, root);
     defer free(str);
 
@@ -141,11 +148,11 @@ print_out :: inline proc(value: Value, root := true) {
 
 // @note(bpunsky): clean API, marshalling and unmarshalling
 
-parse :: inline proc(cel: string) -> (^Parser, bool) {
+parse :: inline proc(cel : string) -> (^Parser, bool) {
     return create_from_string(cel);
 }
 
-parse_file :: inline proc(path: string) -> (^Parser, bool) {
+parse_file :: inline proc(path : string) -> (^Parser, bool) {
     if bytes, ok := os.read_entire_file(path); ok {
         return parse(cast(string) bytes);
     }
@@ -155,21 +162,21 @@ parse_file :: inline proc(path: string) -> (^Parser, bool) {
 
 
 
-Raw_Map_Entry :: struct(Value: type) {
-    key:   __Map_Key,
-    next:  int,
-    value: Value,
+Raw_Map_Entry :: struct(Value : type) {
+    key   : __Map_Key,
+    next  : int,
+    value : Value,
 }
 
-Raw_Map :: struct(Value: type) {
-    hashes:  [dynamic]int,
-    entries: [dynamic]Raw_Map_Entry(Value),
+Raw_Map :: struct(Value : type) {
+    hashes  : [dynamic]int,
+    entries : [dynamic]Raw_Map_Entry(Value),
 }
 
 
 
-unmarshal :: proc(value: Value, data: any) -> bool {
-    type_info := type_info_base_without_enum(data.type_info);
+unmarshal :: proc(value : Value, data : any) -> bool {
+    type_info := type_info_base_without_enum(type_info_of(data.typeid));
     type_info  = type_info_base_without_enum(type_info); // @todo: dirty fucking hack, won't hold up
 
     switch v in value {
@@ -178,12 +185,12 @@ unmarshal :: proc(value: Value, data: any) -> bool {
         case Type_Info_Struct:
             for field, i in variant.names {
                 // @todo: stricter type checking and by-order instead of by-name as an option
-                a := transmute(any) raw.Any{rawptr(uintptr(data.data) + uintptr(variant.offsets[i])), variant.types[i]};
+                a := transmute(any) raw.Any{rawptr(uintptr(data.data) + uintptr(variant.offsets[i])), variant.types[i].id};
                 
                 if val, ok := v[field]; ok {
                     if !unmarshal(val, a) do return false; // @error
                 } else {
-                    type_info := type_info_base_without_enum(a.type_info);
+                    type_info := type_info_base_without_enum(type_info_of(a.typeid));
                     type_info  = type_info_base_without_enum(type_info); // @todo: dirty fucking hack, won't hold up
 
                     mem.set(a.data, 0, type_info.size);
@@ -205,7 +212,7 @@ unmarshal :: proc(value: Value, data: any) -> bool {
             if len(v) > variant.count do return false; // @error
 
             for i in 0..variant.count {
-                a := transmute(any) raw.Any{rawptr(uintptr(data.data) + uintptr(variant.elem_size * i)), variant.elem};
+                a := transmute(any) raw.Any{rawptr(uintptr(data.data) + uintptr(variant.elem_size * i)), variant.elem.id};
                 
                 if !unmarshal(v[i], a) do return false; // @error
             }
@@ -219,7 +226,7 @@ unmarshal :: proc(value: Value, data: any) -> bool {
             array.len = len(v);
 
             for i in 0..array.len {
-                a := transmute(any) raw.Any{rawptr(uintptr(array.data) + uintptr(variant.elem_size * i)), variant.elem};
+                a := transmute(any) raw.Any{rawptr(uintptr(array.data) + uintptr(variant.elem_size * i)), variant.elem.id};
                 if !unmarshal(v[i], a) do return false; // @error
             }
 
@@ -238,7 +245,7 @@ unmarshal :: proc(value: Value, data: any) -> bool {
             array.len = len(v);
 
             for i in 0..array.len {
-                a := transmute(any) raw.Any{rawptr(uintptr(array.data) + uintptr(variant.elem_size * i)), variant.elem};
+                a := transmute(any) raw.Any{rawptr(uintptr(array.data) + uintptr(variant.elem_size * i)), variant.elem.id};
                 if !unmarshal(v[i], a) do return false; // @error
             }
 
@@ -314,7 +321,7 @@ unmarshal :: proc(value: Value, data: any) -> bool {
     return true;
 }
 
-unmarshal_string :: inline proc(cel: string, data: any) -> bool {
+unmarshal_string :: inline proc(cel : string, data : any) -> bool {
     if parser, ok := parse(cel); ok {
         defer destroy(parser);
         return unmarshal(parser.root, data);
@@ -323,7 +330,7 @@ unmarshal_string :: inline proc(cel: string, data: any) -> bool {
     return false;
 }
 
-unmarshal_file :: inline proc(path: string, data: any) -> bool {
+unmarshal_file :: inline proc(path : string, data : any) -> bool {
     if parser, ok := parse_file(path); ok {
         defer destroy(parser);
         return unmarshal(parser.root, data);
@@ -332,8 +339,8 @@ unmarshal_file :: inline proc(path: string, data: any) -> bool {
     return false;
 }
 
-marshal :: proc(data: any) -> Value {
-    type_info := type_info_base_without_enum(data.type_info);
+marshal :: proc(data : any) -> Value {
+    type_info := type_info_base_without_enum(type_info_of(data.typeid));
     type_info  = type_info_base_without_enum(type_info);
 
     value: Value;
@@ -374,7 +381,7 @@ marshal :: proc(data: any) -> Value {
         array := make([]Value, v.count);
 
         for i in 0..v.count {
-            if tmp := marshal(transmute(any) raw.Any{rawptr(uintptr(data.data) + uintptr(v.elem_size*i)), v.elem}); tmp != nil {
+            if tmp := marshal(transmute(any) raw.Any{rawptr(uintptr(data.data) + uintptr(v.elem_size*i)), v.elem.id}); tmp != nil {
                 array[i] = tmp;
             } else {
                 return nil; // @error
@@ -389,7 +396,7 @@ marshal :: proc(data: any) -> Value {
         array := make([]Value, a.len);
 
         for i in 0..a.len {
-            if tmp := marshal(transmute(any) raw.Any{rawptr(uintptr(a.data) + uintptr(v.elem_size*i)), v.elem}); tmp != nil {
+            if tmp := marshal(transmute(any) raw.Any{rawptr(uintptr(a.data) + uintptr(v.elem_size*i)), v.elem.id}); tmp != nil {
                 array[i] = tmp;
             } else {
                 return nil; // @error
@@ -404,7 +411,7 @@ marshal :: proc(data: any) -> Value {
         a := cast(^raw.Dynamic_Array) data.data;
 
         for i in 0..a.len {
-            if tmp := marshal(transmute(any) raw.Any{rawptr(uintptr(a.data) + uintptr(v.elem_size*i)), v.elem}); tmp != nil {
+            if tmp := marshal(transmute(any) raw.Any{rawptr(uintptr(a.data) + uintptr(v.elem_size*i)), v.elem.id}); tmp != nil {
                 append(&array, tmp);
             } else {
                 return nil; // @error
@@ -417,7 +424,7 @@ marshal :: proc(data: any) -> Value {
         dict := Dict{};
 
         for ti, i in v.types {
-            if tmp := marshal(transmute(any) raw.Any{rawptr(uintptr(data.data) + uintptr(v.offsets[i])), ti}); tmp != nil {
+            if tmp := marshal(transmute(any) raw.Any{rawptr(uintptr(data.data) + uintptr(v.offsets[i])), ti.id}); tmp != nil {
                 dict[v.names[i]] = tmp;
             } else {
                 return nil; // @error
@@ -436,7 +443,7 @@ marshal :: proc(data: any) -> Value {
     return value;
 }
 
-marshal_string :: inline proc(data: any) -> (cel: string) {
+marshal_string :: inline proc(data : any) -> (cel : string) {
     if value := marshal(data); value != nil {
         defer destroy_value(value);
         return to_string(value);
@@ -445,7 +452,7 @@ marshal_string :: inline proc(data: any) -> (cel: string) {
     return "";
 }
 
-marshal_file :: inline proc(path: string, data: any) -> (ok: bool) {
+marshal_file :: inline proc(path : string, data : any) -> (ok : bool) {
     if cel := marshal_string(data); cel != "" {
         return os.write_entire_file(path, cast([]u8) cel);
     }
