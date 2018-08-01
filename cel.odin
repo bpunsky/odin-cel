@@ -6,7 +6,7 @@
  *  @Creation: 13-02-2018 06:58:01 UTC-5
  *
  *  @Last By:   Mikkel Hjortshoej
- *  @Last Time: 26-07-2018 23:13:51 UTC+1
+ *  @Last Time: 01-08-2018 23:25:17 UTC+1
  *  
  *  @Description:
  *  
@@ -211,7 +211,7 @@ unmarshal :: proc(value : cel.Value, data : any) -> bool {
         case runtime.Type_Info_Array:
             if len(v) > variant.count do return false; // @error
 
-            for i in 0..variant.count {
+            for i in 0..variant.count-1 {
                 a := transmute(any) mem.Raw_Any{rawptr(uintptr(data.data) + uintptr(variant.elem_size * i)), variant.elem.id};
                 
                 if !unmarshal(v[i], a) do return false; // @error
@@ -225,7 +225,7 @@ unmarshal :: proc(value : cel.Value, data : any) -> bool {
             if len(v) > array.len do return false; // @error
             array.len = len(v);
 
-            for i in 0..array.len {
+            for i in 0..array.len-1 {
                 a := transmute(any) mem.Raw_Any{rawptr(uintptr(array.data) + uintptr(variant.elem_size * i)), variant.elem.id};
                 if !unmarshal(v[i], a) do return false; // @error
             }
@@ -244,7 +244,7 @@ unmarshal :: proc(value : cel.Value, data : any) -> bool {
             if len(v) > array.cap do context <- mem.context_from_allocator(array.allocator) do mem.resize(array.data, array.cap, len(v)*variant.elem_size);
             array.len = len(v);
 
-            for i in 0..array.len {
+            for i in 0..array.len-1 {
                 a := transmute(any) mem.Raw_Any{rawptr(uintptr(array.data) + uintptr(variant.elem_size * i)), variant.elem.id};
                 if !unmarshal(v[i], a) do return false; // @error
             }
@@ -380,7 +380,7 @@ marshal :: proc(data : any) -> cel.Value {
     case runtime.Type_Info_Array:
         array := make([]cel.Value, v.count);
 
-        for i in 0..v.count {
+        for i in 0..v.count-1 {
             if tmp := marshal(transmute(any) mem.Raw_Any{rawptr(uintptr(data.data) + uintptr(v.elem_size*i)), v.elem.id}); tmp != nil {
                 array[i] = tmp;
             } else {
@@ -395,7 +395,7 @@ marshal :: proc(data : any) -> cel.Value {
 
         array := make([]cel.Value, a.len);
 
-        for i in 0..a.len {
+        for i in 0..a.len-1 {
             if tmp := marshal(transmute(any) mem.Raw_Any{rawptr(uintptr(a.data) + uintptr(v.elem_size*i)), v.elem.id}); tmp != nil {
                 array[i] = tmp;
             } else {
@@ -410,7 +410,7 @@ marshal :: proc(data : any) -> cel.Value {
 
         a := cast(^mem.Raw_Dynamic_Array) data.data;
 
-        for i in 0..a.len {
+        for i in 0..a.len-1 {
             if tmp := marshal(transmute(any) mem.Raw_Any{rawptr(uintptr(a.data) + uintptr(v.elem_size*i)), v.elem.id}); tmp != nil {
                 append(&array, tmp);
             } else {
